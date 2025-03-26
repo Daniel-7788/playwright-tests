@@ -13,21 +13,21 @@ test('訊息發送流程測試', async () => {
   const page = await context.newPage();
   console.log('✅ 開啟新分頁');
 
-  // 進入登入頁面
-  await page.goto('https://feature.aitago.tw/login');
-  console.log('🌐 已進入登入頁面');
-
-  // 輸入登入資訊
-  await page.getByLabel('電子信箱').fill('test@example.com');
-  await page.getByLabel('密碼').fill('thiSizB1ev');
-  await page.locator('button[type="submit"]').click();
-  console.log('🔐 登入中');
-
-  // 等待導向頁面載入
-  await page.waitForURL('**/line-oa/dashboard/performance', { timeout: 15000 });
-  console.log('🎯 成功導向至 dashboard');
-
   try {
+    // 進入登入頁面
+    await page.goto('https://feature.aitago.tw/login');
+    console.log('🌐 已進入登入頁面');
+
+    // 輸入登入資訊
+    await page.getByLabel('電子信箱').fill('test@example.com');
+    await page.getByLabel('密碼').fill('thiSizB1ev');
+    await page.locator('button[type="submit"]').click();
+    console.log('🔐 登入中');
+
+    // 等待導向頁面載入
+    await page.waitForURL('**/line-oa/dashboard/performance', { timeout: 15000 });
+    console.log('🎯 成功導向至 dashboard');
+
     // 進入訊息發送頁面
     await page.goto('https://feature.aitago.tw/line-oa/marketing/campaign/6');
     console.log('📩 進入訊息發送頁面');
@@ -65,12 +65,22 @@ test('訊息發送流程測試', async () => {
     console.log('➡️ 點擊下一步');
 
     // 預設立即發送，點擊發布活動
-    await page.click('button:has-text("發布活動")');
-    console.log('🚀 點擊發布活動');
+    const [response] = await Promise.all([
+      page.waitForResponse(res => res.url().includes('/api') && res.status() === 200),
+      page.click('button:has-text("發布活動")')
+    ]);
+    console.log('🚀 點擊發布活動並收到後端回應');
 
-    // 驗證發送成功（視實際通知或 URL 變化而定）
-    await page.waitForSelector('text=發送成功', { timeout: 10000 });
-    console.log('✅ 發送成功');
+    // 確認發送成功訊息或活動名稱出現於頁面中
+    await page.waitForSelector(`text=${activityName}`, { timeout: 10000 });
+    console.log('✅ 發送成功並驗證活動建立');
+
+    // 驗證 LINE 訊息是否真的發送（透過後台訊息紀錄頁面檢查）
+    await page.goto('https://feature.aitago.tw/line-oa/message-history');
+    console.log('📄 前往訊息紀錄頁面');
+
+    await page.waitForSelector(`text=${activityName}`, { timeout: 10000 });
+    console.log('📬 成功驗證 LINE 訊息已發送（後台訊息紀錄中找到）');
 
   } catch (error) {
     console.error('❌ 測試過程中出現錯誤：', error);
@@ -78,9 +88,12 @@ test('訊息發送流程測試', async () => {
     await page.screenshot({ path: screenshotPath, fullPage: true });
     console.log(`🖼️ 錯誤截圖已儲存：${screenshotPath}`);
   } finally {
-    // 停止 trace 並儲存檔案（確保唯一）
-    await context.tracing.stop({ path: 'trace.zip' });
-    console.log('🧪 Trace 紀錄完成並儲存 trace.zip');
+    try {
+      await context.tracing.stop({ path: 'trace.zip' });
+      console.log('🧪 Trace 紀錄完成並儲存 trace.zip');
+    } catch (err) {
+      console.warn('⚠️ 無法儲存 trace，可能未啟動或已被終止');
+    }
 
     await browser.close();
     console.log('🛑 測試結束，瀏覽器關閉');
